@@ -1,0 +1,80 @@
+# ------------------------------------------------------------------
+# One-time tool setup and configuration
+# ------------------------------------------------------------------
+[bootstrap.packages]
+# Arch
+"pacman:cscope"           = "latest"
+"pacman:universal-ctags"  = "latest"
+# Debian/Ubuntu
+"apt:cscope"              = "latest"
+"apt:universal-ctags"     = "latest"
+# Fedora / RHEL / Rocky / Alma
+"dnf:cscope"              = "latest"
+"dnf:ctags"               = "latest"
+# openSUSE / SLES
+"zypper:cscope"           = "latest"
+"zypper:universal-ctags"  = "latest"
+# macOS / Linux (Homebrew)
+"brew:cscope"             = "latest"
+"brew:universal-ctags"    = "latest"
+# Windows (Scoop)
+"scoop:cscope"            = "latest"
+"scoop:universal-ctags"   = "latest"
+# Windows (Winget) — cscope not available
+"winget:UniversalCtags.Ctags" = "latest"
+
+[tasks.otc]
+# One Time Configuration for weetag
+description = "Ensure addition of weetag DB related files to global gitignore"
+run = """
+# May fail for non-bash shells TODO
+set -euo pipefail
+if [ "$(git config --global core.excludesfile)" == "" ]; then
+	git config --global core.excludesfile ~/.config/gitignore
+	touch ~/.config/gitignore
+fi
+if ! grep -qxF "ncscope.out" $(git config --global core.excludesfile); then
+	echo -e "tags\ncscope.out\nncscope.out\nctags.files\ncscope.files\n.retag.files">> $(git config --global core.excludesfile)
+fi
+"""
+run_windows = """
+echo TODO
+"""
+
+[env]
+_.path = ["{{ xdg_config_home }}/mise/conf.d/bin"]
+
+# ------------------------------------------------------------------
+# Regular command shortcuts (via aliases/function as per shell)
+# ------------------------------------------------------------------
+### Bash / Zsh / Fish (Native [shell_alias] support)
+[shell_alias]
+detag = "rm -rf tags cscope.out ncscope.out ctags.files cscope.files .retag.files"
+### Powershell (Use hooks and funcs until [shell_alias] is supported)
+[hooks.enter]
+shell = "pwsh"
+script = """
+if (-not $global:__mise_func_registry) { $global:__mise_func_registry = @{} }
+$__before = (Get-Command -CommandType Function).Name
+
+function detag { Remote-Item tags cscope.out ncscope.out ctags.files cscope.files .retag.files }
+
+# Save diff snapshot of function registry to get func names from this toml
+$__new = (Get-Command -CommandType Function).Name | Where-Object { $__before -notcontains $_ }
+$global:__mise_func_registry[(Get-Location).Path] = $__new
+"""
+
+# ------------------------------------------------------------------
+# Undefine command shortcuts (aliases/function as per shell)
+# ------------------------------------------------------------------
+### Powershell (Use hooks and undeclare funcs until [shell_alias] is supported)
+[hooks.leave]
+shell = "pwsh"
+script = """
+$key = (Get-Location).Path
+# Use previously created diff-snapshot to get list of func names to unset/remove from registry
+if ($global:__mise_func_registry -and $global:__mise_func_registry.ContainsKey($key)) {
+	$global:__mise_func_registry[$key] | ForEach-Object { Remove-Item "function:$_" -Force }
+	$global:__mise_func_registry.Remove($key)
+}
+"""
